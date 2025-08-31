@@ -1,47 +1,79 @@
 import requests
+import time
 from utils import amount_url, get_game_results
 
-end = "https://loki1.weebet.tech"
-login = "/auth/login"
+def perform_login():
+    """
+    Realiza o login e retorna a URL do jogo.
+    Retorna None em caso de falha.
+    """
+    end = "https://loki1.weebet.tech"
+    login_url = end + "/auth/login"
 
-payload = {
-    "username":"ancosta1995@gmail.com",
-    "password":"Android@120",
-    "googleId":"",
-    "googleIdToken":"",
-    "loginMode":"email",
-    "ignorarValidacaoEmailObrigatoria": True,
-    "betting_shop_code": None
-}
+    payload = {
+        "username":"ancosta1995@gmail.com",
+        "password":"Android@120",
+        "googleId":"",
+        "googleIdToken":"",
+        "loginMode":"email",
+        "ignorarValidacaoEmailObrigatoria": True,
+        "betting_shop_code": None
+    }
 
-headers = {
-    "Content-Type": "application/json",
-    "Origin": "https://www.cassinopro.bet",
-    "Referer": "https://www.cassinopro.bet/",
-    "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36"
-}
+    headers = {
+        "Content-Type": "application/json",
+        "Origin": "https://www.cassinopro.bet",
+        "Referer": "https://www.cassinopro.bet/",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36"
+    }
 
-response = requests.post(end + login, json=payload, headers=headers)
+    try:
+        response = requests.post(login_url, json=payload, headers=headers, timeout=30)
+        response.raise_for_status() # Lança exceção para códigos de erro HTTP
 
-if response.status_code == 200:
-    body = response.json()
-    if body['success']:
-        token = body['results']['token']
-        tokenCassino = body['results']['tokenCassino']
+        body = response.json()
+        if body.get('success'):
+            token = body['results']['token']
+            tokenCassino = body['results']['tokenCassino']
+            
+            urlAv = amount_url(token, tokenCassino)
+            headers["Authorization"] = f"Bearer {token}"
 
-        urlAv = amount_url(token, tokenCassino)
+            response_game_url = requests.get(urlAv, headers=headers, timeout=30)
+            response_game_url.raise_for_status()
+            
+            game_body = response_game_url.json()
+            return game_body.get('gameURL')
+        else:
+            print("Falha no login, resposta não continha 'success':", body)
+            return None
 
-        headers["Authorization"] = f"Bearer {token}"
+    except requests.exceptions.RequestException as e:
+        print(f"Erro de conexão durante o login: {e}")
+        return None
+    except Exception as e:
+        print(f"Erro inesperado durante o login: {e}")
+        return None
 
-        response = requests.get(urlAv, headers=headers)
+def main():
+    """
+    Loop principal que garante que o crawler esteja sempre rodando.
+    """
+    while True:
+        print("Iniciando nova sessão...")
+        game_url = perform_login()
 
-        if response.status_code == 200:
-            body = response.json()
-            gameURL = body['gameURL']
+        if game_url:
+            try:
+                # Inicia a raspagem dos resultados
+                get_game_results(game_url)
+            except Exception as e:
+                print(f"A função de raspagem falhou com o erro: {e}. Reiniciando o processo...")
+        else:
+            print("Não foi possível obter a URL do jogo. Tentando novamente em 60 segundos.")
 
-            #urlFinal = resolve_game_url(gameURL)
+        # Pausa antes de tentar novamente para evitar sobrecarregar o servidor em caso de falhas repetidas
+        time.sleep(60)
 
-            results = get_game_results(gameURL)
-
-            #print(results)
-
+if __name__ == "__main__":
+    main()
