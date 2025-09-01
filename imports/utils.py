@@ -1,20 +1,10 @@
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-import sqlite3
 from datetime import datetime
-import time
+import imports.core
+from imports.db import db
 
 def amount_url(token, tokenCassino):
     return f"https://central.cassinopro.bet/casino/games/url?token={tokenCassino}&tokenUsuario={token}&symbol=znt-aviator&language=pt&playMode=REAL&cashierUr=https%3A%2F%2Fcassinopro.bet%2Fclientes%2Fdeposito&lobbyUrl=https%3A%2F%2Fcassinopro.bet%2Fcasino&fornecedor=spribe&isMobile=true&plataforma=mobile"
-
-def save_result(result: float):
-    conn = sqlite3.connect("data.db")
-    cursor = conn.cursor()
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute("INSERT INTO results (result, created_at) VALUES (?, ?)", (result, timestamp))
-
-    conn.commit()
-    conn.close()
 
 def get_game_results(game_url: str):
     """
@@ -61,9 +51,15 @@ def get_game_results(game_url: str):
             while True:
                 results = page.evaluate("window.__results")
                 if results and results != last_results:
+
                     print("Novos resultados:", results[0])
-                    save_result(float(results[0].replace('x', '')))
+
+                    db.save_result(float(results[0].replace('x', '')))
+
+                    imports.core.analisys() #apos cada salvamento ele executa a analise
+
                     last_results = results
+
         except PlaywrightTimeoutError:
             print("Erro de timeout no Playwright. A página pode ter desconectado ou demorou muito para carregar.")
             raise # Lança a exceção para ser capturada no main.py

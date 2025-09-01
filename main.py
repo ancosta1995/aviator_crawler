@@ -1,6 +1,6 @@
 import requests
 import time
-from utils import amount_url, get_game_results
+import imports.utils
 
 def perform_login():
     """
@@ -36,7 +36,7 @@ def perform_login():
             token = body['results']['token']
             tokenCassino = body['results']['tokenCassino']
             
-            urlAv = amount_url(token, tokenCassino)
+            urlAv = imports.utils.amount_url(token, tokenCassino)
             headers["Authorization"] = f"Bearer {token}"
 
             response_game_url = requests.get(urlAv, headers=headers, timeout=30)
@@ -66,7 +66,7 @@ def main():
         if game_url:
             try:
                 # Inicia a raspagem dos resultados
-                get_game_results(game_url)
+                imports.utils.get_game_results(game_url)
             except Exception as e:
                 print(f"A função de raspagem falhou com o erro: {e}. Reiniciando o processo...")
         else:
