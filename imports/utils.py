@@ -13,7 +13,30 @@ def get_game_results(game_url: str):
     """
     with sync_playwright() as p:
         try:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=True,
+                args = [
+                        "--no-sandbox",                  # Necessário em ambientes de servidor/Docker
+                        "--disable-dev-shm-usage",       # Evita erros de memória compartilhada em VPS/Docker
+                        "--disable-gpu",                 # Sem aceleração gráfica
+                        "--disable-extensions",          # Desativa extensões
+                        "--disable-plugins",             # Desativa plugins (quase irrelevante hoje)
+                        "--disable-sync",                # Desativa sync do Chrome
+                        "--disable-background-networking", # Evita requisições extras de telemetria
+                        "--disable-background-timer-throttling", # Não "segura" timers em abas em segundo plano
+                        "--disable-breakpad",            # Desativa crash reports
+                        "--disable-component-extensions-with-background-pages",
+                        "--disable-default-apps",        # Não carrega apps default do Chrome
+                        "--disable-popup-blocking",      # Evita bloqueio de popups
+                        "--disable-translate",           # Remove tradutor embutido
+                        "--metrics-recording-only",      # Coleta mínima de métricas
+                        "--mute-audio",                  # Sem áudio
+                        "--no-first-run",                # Pula tela inicial
+                        "--no-zygote",                   # Desativa processos "zygote" (pode economizar memória)
+                        "--disable-software-rasterizer", # Sem fallback gráfico
+                        "--disable-features=TranslateUI,BlinkGenPropertyTrees", # Desativa features extras
+                    ]
+            )
             context = browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                         "AppleWebKit/537.36 (KHTML, like Gecko) "

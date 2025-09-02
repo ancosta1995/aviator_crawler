@@ -4,6 +4,7 @@ import os
 from imports.db import db
 from telegram import Bot
 import asyncio  # Adicionado para chamadas assíncronas
+import re
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "config.ini"))
@@ -13,16 +14,31 @@ config.read(CONFIG_PATH, encoding='utf-8')
 
 HOUR = int(config['config']['hora'])
 CANDLE = int(config['config']['vela'])
+LIMIT_HOURS = int(config['config']['limite_horarios'])
 LINE_GREEN = config['config']['linha_green']
 LINE_RED = config['config']['linha_red']
-LIMIT_HOURS = config['config']['limite_horarios']
+CORRECT_GENERAL_GREEN = config['config']['correcao_geral_green']
+CORRECT_GENERAL_RED = config['config']['correcao_geral_RED']
+
+MARTINGALE=3
 
 TOKEN = config['telegram']['token']
 CHAT_ID = config['telegram']['chat_id']
-MESSAGE = "LISTA PROBABILIDADE AVIATOR \n\n💳 Segurança em 2x 💳\n✈️ Buscar {{candle}}x a 50x \n\n{{hours}}\n\n⚠️ Entrar 15s antes ou no horário exato! \n🔞 Proibido para menores idade\n\n[CLIQUE AQUI E SE CADASTRE](https://cassinopro.bet/cadastro?ref=REGISTRO)"
+MESSAGE = "LISTA PROBABILIDADE AVIATOR \n\n💳 Segurança em 2x 💳\n✈️ Buscar {{candle}}.00x a 50x \n\n{{hours}}\n\n⚠️ Entrar 15s antes ou no horário exato! \n🔞 Proibido para menores idade\n\n[CLIQUE AQUI E SE CADASTRE](https://cassinopro.bet/cadastro?ref=REGISTRO)"
 
 bot = Bot(token=TOKEN)
 
+def remove_markes(text):
+    """
+    Remove todos os marcadores no formato ((...)) de uma string.
+    
+    Args:
+        texto (str): A string que pode conter marcadores ((...))
+        
+    Returns:
+        str: A string sem os marcadores.
+    """
+    return re.sub(r'\(\(.*?\)\)', '', text)
 
 def analisys():
     # verifica se tem registro no intervalo de hora configurado
@@ -50,7 +66,7 @@ def analisys():
         seen_hours = set()
 
         for result, hour_min in selected_hours:
-            current_hour = str(datetime.now().hour)
+            current_hour = datetime.now().strftime("%H")
             minute = str(hour_min).split(':')
             hour = current_hour + ':' + minute[1]
 
@@ -59,10 +75,10 @@ def analisys():
                 seen_hours.add(hour)
                 hour_to_correct += 1
 
-        final_message = MESSAGE.replace("{{candle}}", str(float(CANDLE))).replace("{{hours}}", hours_str)
+        final_message = MESSAGE.replace("{{candle}}", str(CANDLE)).replace("{{hours}}", hours_str)
         
         # --- CORREÇÃO ASYNCIO APLICADA AQUI ---
-        sent_message = asyncio.run(bot.send_message(chat_id=CHAT_ID, text=final_message, parse_mode="Markdown", disable_web_page_preview=True))
+        sent_message = asyncio.run(bot.send_message(chat_id=CHAT_ID, text=remove_markes(final_message), parse_mode="Markdown", disable_web_page_preview=True))
         
         db.update_state('hours_to_correct', str(hour_to_correct))  # salva a quantidade de horários a serem corrigidos
         db.update_state('last_message_id', str(sent_message.message_id))  # salva o id para corrigir
@@ -77,6 +93,40 @@ def analisys():
         message_edit = db.get_state('last_message')
         message_id = db.get_state('last_message_id')
         hours_to_correct = int(db.get_state('hours_to_correct'))
+
+        # Verifica sempre se deve reiniciar o ciclo, mesmo que não tenha linhas para corrigir
+        if hours_to_correct == 0 or datetime.now().minute == 0:
+            greens = int(db.get_state('greens'))
+            reds = int(db.get_state('reds'))
+
+            total = greens + reds
+
+            percent_greens = round((greens / total) * 100, 2)
+            percent_reds = round((reds / total) * 100, 2)
+
+            relat_green = CORRECT_GENERAL_GREEN.replace('{{total}}', str(greens)).replace('{{percent}}', str(percent_greens) + '%')
+            relat_red = CORRECT_GENERAL_RED.replace('{{total}}', str(reds)).replace('{{percent}}', str(percent_reds) + '%')
+
+            relat = f"{relat_green}\n{relat_red}"
+
+            msg_ed = f"{message_edit}\n\n{relat}"
+
+            asyncio.run(bot.edit_message_text(
+                chat_id=CHAT_ID,
+                message_id=message_id,
+                text=remove_markes(msg_ed),
+                parse_mode="Markdown",
+                disable_web_page_preview=True
+            ))
+
+            db.update_state('last_message_id', '')
+            db.update_state('last_message', '')
+            db.update_state('hours_to_correct', '0')
+            db.update_state('greens', '0')
+            db.update_state('reds', '0')
+            db.update_state('state', 'sending')
+
+            print(f"Ciclo finalizado, reiniciando")
 
         # Corrigir linhas existentes
         if hours_to_correct > 0:
@@ -103,36 +153,14 @@ def analisys():
                     asyncio.run(bot.edit_message_text(
                         chat_id=CHAT_ID,
                         message_id=message_id,
-                        text=msg_edit.replace('((line_correct))', ''),
+                        text=remove_markes(msg_edit),
                         parse_mode="Markdown",
                         disable_web_page_preview=True
                     ))
 
+                    db.update_state('hours_to_correct', str(hours_to_correct - 1))
                     db.update_state('last_message', msg_edit)
                     print(f"Mensagem {message_id} editada com {current_time}")
                     break  # só edita uma linha por vez
 
-        # Verifica sempre se deve reiniciar o ciclo, mesmo que não tenha linhas para corrigir
-        if hours_to_correct == 0 or datetime.now().minute == 0:
-            greens = db.get_state('greens')
-            reds = db.get_state('reds')
-
-            relat = f"GREENS: {greens}\nREDS: {reds}"
-            msg_ed = f"{message_edit}\n\n{relat}"
-
-            asyncio.run(bot.edit_message_text(
-                chat_id=CHAT_ID,
-                message_id=message_id,
-                text=msg_ed,
-                parse_mode="Markdown",
-                disable_web_page_preview=True
-            ))
-
-            db.update_state('last_message_id', '')
-            db.update_state('last_message', '')
-            db.update_state('hours_to_correct', '0')
-            db.update_state('greens', '0')
-            db.update_state('reds', '0')
-            db.update_state('state', 'sending')
-
-            print(f"Ciclo finalizado, reiniciando")
+        
