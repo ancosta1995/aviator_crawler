@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "database.db")
 
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+conn = sqlite3.connect(DB_PATH, timeout=10, isolation_level=None, check_same_thread=False) 
 
 def save_result(result: float):
     """Salva resultado com timestamp"""
@@ -15,7 +15,7 @@ def save_result(result: float):
         "INSERT INTO results (result, created_at) VALUES (?, ?)",
         (result, timestamp)
     )
-    conn.commit()
+    #conn.commit()
 
 def has_record_in_specific_hour(hours_ago):
     """
@@ -93,7 +93,7 @@ def update_state(name: str, value: str):
     """
     cursor = conn.cursor()
     cursor.execute("UPDATE states SET value = ? WHERE name = ?", (value, name))
-    conn.commit()
+    #conn.commit()
 
 def get_max_result(hour: int, minute: int):
     """

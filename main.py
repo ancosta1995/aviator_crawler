@@ -1,6 +1,8 @@
 import requests
 import time
 import imports.utils
+import nest_asyncio
+nest_asyncio.apply()
 
 def perform_login():
     """
@@ -73,7 +75,7 @@ def main():
             print("Não foi possível obter a URL do jogo. Tentando novamente em 60 segundos.")
 
         # Pausa antes de tentar novamente para evitar sobrecarregar o servidor em caso de falhas repetidas
-        time.sleep(60)
+        time.sleep(10)
 
 if __name__ == "__main__":
     main()
